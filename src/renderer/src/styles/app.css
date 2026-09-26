@@ -359,11 +359,13 @@ button { border: 0; }
 .sticky-note-card__close:hover, .sticky-note-card__close:focus-visible { color: white; background: var(--danger); }
 .sticky-note-card__editor { width: 100%; height: calc(100% - 3.15em); padding: 1em; resize: none; border: 0; outline: 0; color: var(--text-dark); background: transparent; font: 700 1em/1.5 "Trebuchet MS", "Segoe UI", sans-serif; user-select: text; }
 /* Media/Obsidian cards reuse the note chrome; overriding --yellow recolors border and header with it. */
-.sticky-note-card--media { --yellow: var(--home-media); }
+.sticky-note-card--media { overflow: visible; border: 0; border-radius: var(--radius-lg); background: transparent; box-shadow: none; }
+.sticky-note-card--media.sticky-note-card--selected, .sticky-note-card--media:focus-within { box-shadow: 0 0 0 3px var(--primary); }
+.sticky-note-card__media-drag { width: 100%; height: 100%; touch-action: none; }
+.sticky-note-card__media-drag > .mini-media { width: 100%; height: 100%; }
 .sticky-note-card--obsidian { --yellow: var(--blue); }
 .sticky-note-card__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sticky-note-card--obsidian .sticky-note-card__editor { font: 500 .95em/1.55 var(--font-mono); }
-.sticky-note-card__media { display: block; width: 100%; height: calc(100% - 3.15em); object-fit: contain; user-select: none; }
 .sticky-note-card__actions { margin-left: auto; display: flex; gap: .3em; }
 .sticky-note-card__markdown { height: calc(100% - 3.15em); padding: .4em 1em 1em; overflow: auto; color: var(--text-dark); line-height: 1.5; user-select: text; cursor: text; }
 .sticky-note-card__markdown :is(h1, h2, h3, h4) { margin: .7em 0 .3em; line-height: 1.2; }

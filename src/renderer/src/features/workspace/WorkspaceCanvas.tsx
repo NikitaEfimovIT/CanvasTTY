@@ -189,6 +189,7 @@ interface WorkspaceCanvasProps {
   onCreateStickyNote(note: StickyNote): void;
   onStickyNoteBoundsChange(id: string, bounds: SessionBounds): void;
   onStickyNoteTextChange(id: string, text: string): void;
+  onStickyNoteFileChange(id: string, filePath: string): void;
   onDeleteStickyNote(id: string): void;
 }
 
@@ -205,7 +206,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps): React.JSX.Element 
     onRestartSession, onDisposeSession, onBrowserBoundsChange, onFocusBrowser,
     onCloseBrowser, onCreateCanvasRegion, onChangeCanvasRegion,
     onCanvasRegionBoundsChange, onDeleteCanvasRegion, onCreateStickyNote,
-    onStickyNoteBoundsChange, onStickyNoteTextChange, onDeleteStickyNote
+    onStickyNoteBoundsChange, onStickyNoteTextChange, onStickyNoteFileChange, onDeleteStickyNote
   } = props;
   const viewport = useRef<HTMLDivElement>(null);
   const [contextMenu, setContextMenu] = useState<CanvasMenuState | null>(null);
@@ -974,6 +975,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps): React.JSX.Element 
               ]}
               onBoundsChange={onStickyNoteBoundsChange}
               onTextChange={onStickyNoteTextChange}
+              onFileChange={onStickyNoteFileChange}
               onClose={onDeleteStickyNote}
               groupSelected={marqueeSelection.has(noteLayerId(note.id))}
             />

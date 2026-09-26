@@ -3,6 +3,7 @@ import Markdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { LocaleId, Point, SessionBounds, StickyNote, StickyNoteKind } from "../../../../shared/contracts";
 import { UiIcon } from "../../components/UiIcon";
+import { HomeMediaWidget } from "../home/HomeMediaWidget";
 import { t } from "../../lib/i18n";
 import { snapMove, snapResize, type ResizeDirection } from "../workspace/snap";
 import {
@@ -21,6 +22,7 @@ interface StickyNoteCardProps {
   snapTargets: readonly SessionBounds[];
   onBoundsChange(id: string, bounds: SessionBounds): void;
   onTextChange(id: string, text: string): void;
+  onFileChange(id: string, filePath: string): void;
   onClose(id: string): void;
   /** True while this card is part of the marquee selection. */
   groupSelected?: boolean;
@@ -36,6 +38,7 @@ interface ResizeState extends DragState {
   direction: ResizeDirection;
 }
 
+const DRAG_THRESHOLD_PX = 4;
 const RESIZE_DIRECTIONS: ResizeDirection[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 
 type FileCardKind = Exclude<StickyNoteKind, "text">;
@@ -96,11 +99,13 @@ export function StickyNoteCard({
   snapTargets,
   onBoundsChange,
   onTextChange,
+  onFileChange,
   onClose,
   groupSelected = false
 }: StickyNoteCardProps): React.JSX.Element {
   const editor = useRef<HTMLTextAreaElement>(null);
   const dragState = useRef<DragState | null>(null);
+  const mediaDrag = useRef<{ pointerId: number; startClient: Point; moved: boolean } | null>(null);
   const resizeState = useRef<ResizeState | null>(null);
   const textSaveTimer = useRef<number | null>(null);
   const persistedText = useRef(note.text);
@@ -323,6 +328,90 @@ export function StickyNoteCard({
     onBoundsChange(note.id, liveBounds.current);
   };
 
+  const resizeHandles = RESIZE_DIRECTIONS.map((direction) => (
+    <div
+      key={direction}
+      className={`terminal-card__resize-handle terminal-card__resize-handle--${direction}`}
+      aria-hidden="true"
+      onPointerDown={(event) => startResize(event, direction)}
+      onPointerMove={resize}
+      onPointerUp={endResize}
+      onPointerCancel={endResize}
+      onLostPointerCapture={cancelResize}
+    />
+  ));
+  const cardStyle = {
+    zIndex: stackIndex,
+    width: size.width,
+    height: size.height,
+    transform: `translate(${position.x}px, ${position.y}px)`
+  };
+
+  if (kind === "media") {
+    // Reuses the HOME "Your corner" tile as-is; this wrapper only adds canvas drag and resize.
+    // A drag starts after a few pixels so a plain click still reaches the tile's picker.
+    const mediaPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
+      if (event.button !== 0 || (event.target as HTMLElement).closest(".mini-media__remove")) return;
+      mediaDrag.current = { pointerId: event.pointerId, startClient: { x: event.clientX, y: event.clientY }, moved: false };
+    };
+    const mediaPointerMove = (event: React.PointerEvent<HTMLDivElement>): void => {
+      const pending = mediaDrag.current;
+      if (!pending || pending.pointerId !== event.pointerId || event.buttons === 0) return;
+      if (!pending.moved) {
+        if (Math.hypot(event.clientX - pending.startClient.x, event.clientY - pending.startClient.y) < DRAG_THRESHOLD_PX) return;
+        pending.moved = true;
+        event.currentTarget.setPointerCapture(event.pointerId);
+        dragState.current = { pointerId: event.pointerId, startClient: pending.startClient, startBounds: liveBounds.current };
+      }
+      drag(event);
+    };
+    const mediaPointerUp = (event: React.PointerEvent<HTMLDivElement>): void => {
+      if (mediaDrag.current?.pointerId !== event.pointerId) return;
+      if (dragState.current) endDrag(event);
+      else mediaDrag.current = null;
+    };
+    return (
+      <article
+        className={`sticky-note-card sticky-note-card--media ${groupSelected ? "sticky-note-card--selected" : ""}`}
+        data-interactive="true"
+        data-sticky-note-id={note.id}
+        data-canvas-layer-id={`note:${note.id}`}
+        data-wheel-owner="local"
+        style={cardStyle}
+      >
+        <div
+          className="sticky-note-card__media-drag"
+          title={filePath}
+          onPointerDown={mediaPointerDown}
+          onPointerMove={mediaPointerMove}
+          onPointerUp={mediaPointerUp}
+          onPointerCancel={mediaPointerUp}
+          onLostPointerCapture={cancelDrag}
+          onClickCapture={(event) => {
+            // Swallow the click that ends a drag so it does not open the picker.
+            if (mediaDrag.current?.moved) event.stopPropagation();
+            mediaDrag.current = null;
+          }}
+        >
+          <HomeMediaWidget
+            locale={locale}
+            dataUrl={mediaUrl}
+            fit="cover"
+            onRequestMedia={async () => {
+              const path = await pickCardFile("media");
+              if (!path) return;
+              setMediaUrl(pickedContent.get(path) ?? null);
+              setFileError(null);
+              onFileChange(note.id, path);
+            }}
+            onRemoveMedia={async () => onClose(note.id)}
+          />
+        </div>
+        {resizeHandles}
+      </article>
+    );
+  }
+
   return (
     <article
       className={`sticky-note-card sticky-note-card--${kind} ${groupSelected ? "sticky-note-card--selected" : ""}`}
@@ -330,12 +419,7 @@ export function StickyNoteCard({
       data-sticky-note-id={note.id}
       data-canvas-layer-id={`note:${note.id}`}
       data-wheel-owner="local"
-      style={{
-        zIndex: stackIndex,
-        width: size.width,
-        height: size.height,
-        transform: `translate(${position.x}px, ${position.y}px)`
-      }}
+      style={cardStyle}
     >
       <header
         className="sticky-note-card__header"
@@ -346,7 +430,7 @@ export function StickyNoteCard({
         onLostPointerCapture={cancelDrag}
       >
         <span title={filePath}>
-          <UiIcon name={kind === "media" ? "image-plus" : kind === "obsidian" ? "pencil" : "sticky-note"} size="1.15em" />
+          <UiIcon name={kind === "obsidian" ? "pencil" : "sticky-note"} size="1.15em" />
           <span className="sticky-note-card__title">{filePath ? fileName(filePath) : t(locale, "stickyNote")}</span>
         </span>
         {kind === "obsidian" && filePath && (
@@ -398,9 +482,7 @@ export function StickyNoteCard({
           {t(locale, fileError === "read" ? "cardFileUnavailable" : fileError === "open" ? "obsidianOpenFailed" : "obsidianSaveFailed")}
         </p>
       )}
-      {kind === "media" ? (
-        mediaUrl && <img className="sticky-note-card__media" src={mediaUrl} alt={filePath ? fileName(filePath) : ""} draggable={false} />
-      ) : kind === "obsidian" && fileError !== "read" && !editing ? (
+      {kind === "obsidian" && fileError !== "read" && !editing ? (
         <div
           className="sticky-note-card__markdown"
           onDoubleClick={() => setEditing(true)}
@@ -424,18 +506,7 @@ export function StickyNoteCard({
         }}
       />
       )}
-      {RESIZE_DIRECTIONS.map((direction) => (
-        <div
-          key={direction}
-          className={`terminal-card__resize-handle terminal-card__resize-handle--${direction}`}
-          aria-hidden="true"
-          onPointerDown={(event) => startResize(event, direction)}
-          onPointerMove={resize}
-          onPointerUp={endResize}
-          onPointerCancel={endResize}
-          onLostPointerCapture={cancelResize}
-        />
-      ))}
+      {resizeHandles}
     </article>
   );
 }
