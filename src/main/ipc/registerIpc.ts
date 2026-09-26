@@ -1,5 +1,5 @@
 import { extname } from "node:path";
-import { readFile, stat } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import type { IpcMainEvent, IpcMainInvokeEvent, OpenDialogOptions } from "electron";
 import type {
@@ -31,8 +31,10 @@ import { PluginBrowserOpenBroker } from "./PluginBrowserOpenBroker";
 import type { GithubAuthService } from "../services/GithubAuthService";
 import type { HermesHudService } from "../services/HermesHudService";
 import { normalizeExternalUrl } from "../../shared/externalUrl";
+import { readItermProfile } from "../services/itermProfile";
 
 const MAX_MEDIA_BYTES = 25 * 1024 * 1024;
+const MAX_MARKDOWN_BYTES = 1024 * 1024;
 const MEDIA_MIME: Record<string, string> = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -179,8 +181,50 @@ export function registerIpc({
     return { path, dataUrl: await readMedia(path) };
   });
 
+  // Renderer may only touch files the user picked for a saved card (or Home media).
+  const cardFile = (path: unknown, kind: "media" | "obsidian"): path is string => typeof path === "string"
+    && settings.get().stickyNotes.some((note) => note.kind === kind && note.filePath === path);
+
+  ipcMain.handle(IPC.dialogPickMarkdown, async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = {
+      title: "Choose Obsidian note",
+      properties: ["openFile"],
+      filters: [{ name: "Markdown", extensions: ["md"] }]
+    };
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options);
+    const path = result.filePaths[0];
+    if (result.canceled || !path) return null;
+    return { path, text: await readMarkdown(path) };
+  });
+
+  ipcMain.handle(IPC.markdownRead, async (_event, path: unknown) => {
+    if (!cardFile(path, "obsidian")) return null;
+    try {
+      return await readMarkdown(path);
+    } catch (error) {
+      console.warn("CanvasTTY markdown could not be read.", error);
+      return null;
+    }
+  });
+
+  ipcMain.handle(IPC.markdownWrite, async (_event, path: unknown, text: unknown) => {
+    if (!cardFile(path, "obsidian") || typeof text !== "string") throw new Error("Note is not writable.");
+    if (Buffer.byteLength(text) > MAX_MARKDOWN_BYTES) throw new Error("Note is larger than 1 MB.");
+    await writeFile(path, text, "utf8");
+  });
+
+  ipcMain.handle(IPC.markdownOpenInObsidian, async (_event, path: unknown) => {
+    if (!cardFile(path, "obsidian")) throw new Error("Note is not a saved Obsidian card.");
+    await shell.openExternal(`obsidian://open?path=${encodeURIComponent(path)}`);
+  });
+
+  ipcMain.handle(IPC.terminalItermProfile, () => readItermProfile());
+
   ipcMain.handle(IPC.mediaRead, async (_event, path: string) => {
-    if (typeof path !== "string" || settings.get().mediaPath !== path) return null;
+    if (typeof path !== "string" || (settings.get().mediaPath !== path && !cardFile(path, "media"))) return null;
     try {
       return await readMedia(path);
     } catch (error) {
@@ -788,6 +832,13 @@ async function readMedia(path: string): Promise<string> {
 
   const content = await readFile(path);
   return `data:${mime};base64,${content.toString("base64")}`;
+}
+
+async function readMarkdown(path: string): Promise<string> {
+  if (extname(path).toLowerCase() !== ".md") throw new Error("Only Markdown notes are supported.");
+  const metadata = await stat(path);
+  if (!metadata.isFile() || metadata.size > MAX_MARKDOWN_BYTES) throw new Error("Note must be a file smaller than 1 MB.");
+  return readFile(path, "utf8");
 }
 
 function providerSecretValue(value: string): ProviderSecretId {

@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import type {
   AgentProviderId,
@@ -870,9 +870,15 @@ export function normalizeStickyNotes(
     const source = value as Partial<StickyNote>;
     if (!isInstanceId(source.id) || ids.has(source.id)) continue;
     if (typeof source.text !== "string" || !isFinitePoint(source.position) || !isFiniteSize(source.size)) continue;
+    const kind = source.kind === "media" || source.kind === "obsidian" ? source.kind : undefined;
+    const filePath = kind && typeof source.filePath === "string" && isAbsolute(source.filePath)
+      ? source.filePath
+      : undefined;
+    if (kind && !filePath) continue;
     notes.push({
       id: source.id,
       text: source.text.slice(0, 20_000),
+      ...(kind && filePath ? { kind, filePath } : {}),
       position: { x: source.position.x, y: source.position.y },
       size: {
         width: clamp(source.size.width, STICKY_NOTE_MIN_SIZE.width, STICKY_NOTE_MAX_SIZE.width),

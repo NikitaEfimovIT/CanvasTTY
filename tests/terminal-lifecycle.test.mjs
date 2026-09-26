@@ -15,7 +15,7 @@ test("palette changes retheme the live xterm without recreating it", async () =>
   const mountDependencies = effectDependenciesContaining(source, "new Terminal({");
 
   assert.equal(mountDependencies, "session.id");
-  assert.match(source, /terminal\.options\.theme = terminalTheme\(palette\)/);
+  assert.match(source, /terminal\.options\.theme = themeRef\.current/);
 });
 
 test("terminal copy shortcuts write the xterm selection without reaching the PTY", async () => {

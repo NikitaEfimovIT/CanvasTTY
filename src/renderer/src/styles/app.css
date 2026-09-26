@@ -358,6 +358,29 @@ button { border: 0; }
 .sticky-note-card__close { width: 2.15em; height: 2.15em; flex: 0 0 auto; display: grid; place-items: center; border-radius: .54em; color: color-mix(in srgb, var(--text-dark) 72%, transparent); background: color-mix(in srgb, var(--text-dark) 6%, transparent); cursor: pointer; transition: color .15s ease, background .15s ease; }
 .sticky-note-card__close:hover, .sticky-note-card__close:focus-visible { color: white; background: var(--danger); }
 .sticky-note-card__editor { width: 100%; height: calc(100% - 3.15em); padding: 1em; resize: none; border: 0; outline: 0; color: var(--text-dark); background: transparent; font: 700 1em/1.5 "Trebuchet MS", "Segoe UI", sans-serif; user-select: text; }
+/* Media/Obsidian cards reuse the note chrome; overriding --yellow recolors border and header with it. */
+.sticky-note-card--media { --yellow: var(--home-media); }
+.sticky-note-card--obsidian { --yellow: var(--blue); }
+.sticky-note-card__title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sticky-note-card--obsidian .sticky-note-card__editor { font: 500 .95em/1.55 var(--font-mono); }
+.sticky-note-card__media { display: block; width: 100%; height: calc(100% - 3.15em); object-fit: contain; user-select: none; }
+.sticky-note-card__actions { margin-left: auto; display: flex; gap: .3em; }
+.sticky-note-card__markdown { height: calc(100% - 3.15em); padding: .4em 1em 1em; overflow: auto; color: var(--text-dark); line-height: 1.5; user-select: text; cursor: text; }
+.sticky-note-card__markdown :is(h1, h2, h3, h4) { margin: .7em 0 .3em; line-height: 1.2; }
+.sticky-note-card__markdown h1 { font-size: 1.45em; }
+.sticky-note-card__markdown h2 { font-size: 1.25em; }
+.sticky-note-card__markdown :is(p, ul, ol, pre, blockquote, table) { margin: 0 0 .6em; }
+.sticky-note-card__markdown :is(ul, ol) { padding-left: 1.3em; }
+.sticky-note-card__markdown li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.3em; }
+.sticky-note-card__markdown a { color: inherit; text-decoration: underline; }
+.sticky-note-card__markdown code { padding: .1em .3em; border-radius: 4px; background: color-mix(in srgb, var(--text-dark) 10%, transparent); font: .9em var(--font-mono); }
+.sticky-note-card__markdown pre { padding: .7em; overflow: auto; border-radius: 8px; background: color-mix(in srgb, var(--text-dark) 10%, transparent); }
+.sticky-note-card__markdown pre code { padding: 0; background: none; }
+.sticky-note-card__markdown blockquote { padding-left: .8em; border-left: 3px solid color-mix(in srgb, var(--text-dark) 35%, transparent); }
+.sticky-note-card__markdown table { border-collapse: collapse; }
+.sticky-note-card__markdown :is(th, td) { padding: .25em .6em; border: 1px solid color-mix(in srgb, var(--text-dark) 25%, transparent); }
+.sticky-note-card__markdown img { max-width: 100%; }
+.sticky-note-card__status { margin: 0; padding: .6em 1em; color: white; background: var(--danger); font-weight: 700; }
 .sticky-note-card__editor::placeholder { color: color-mix(in srgb, var(--text-dark) 58%, transparent); }
 .home-editor-toolbar { position: absolute; left: 50%; top: 18px; z-index: 500; min-height: 48px; padding: 5px 6px 5px 15px; display: flex; align-items: center; gap: 8px; border-radius: 14px; color: white; background: rgba(40,41,52,.96); box-shadow: var(--shadow-md); transform: translateX(-50%); }
 .home-editor-toolbar strong { margin-right: 6px; font-size: 12px; }

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { LocaleId, Point, SessionBounds, StickyNote } from "../../../../shared/contracts";
+import Markdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { LocaleId, Point, SessionBounds, StickyNote, StickyNoteKind } from "../../../../shared/contracts";
 import { UiIcon } from "../../components/UiIcon";
 import { t } from "../../lib/i18n";
 import { snapMove, snapResize, type ResizeDirection } from "../workspace/snap";
@@ -36,6 +38,53 @@ interface ResizeState extends DragState {
 
 const RESIZE_DIRECTIONS: ResizeDirection[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 
+type FileCardKind = Exclude<StickyNoteKind, "text">;
+
+// Content returned by the picker, so a new card renders before its settings save reaches main.
+// ponytail: never evicted; one entry per card picked this run.
+const pickedContent = new Map<string, string>();
+
+/** Opens the file picker for a media/Obsidian card; resolves to the chosen path or null. */
+export async function pickCardFile(kind: FileCardKind): Promise<string | null> {
+  try {
+    if (kind === "media") {
+      const picked = await window.canvasTTY.dialog.pickMedia();
+      if (picked) pickedContent.set(picked.path, picked.dataUrl);
+      return picked?.path ?? null;
+    }
+    const picked = await window.canvasTTY.dialog.pickMarkdown();
+    if (picked) pickedContent.set(picked.path, picked.text);
+    return picked?.path ?? null;
+  } catch (error) {
+    console.error("CanvasTTY could not open the card file.", error);
+    return null;
+  }
+}
+
+function readCardFile(kind: FileCardKind, path: string): Promise<string | null> {
+  return kind === "media" ? window.canvasTTY.media.read(path) : window.canvasTTY.markdown.read(path);
+}
+
+// Links must leave the app: a plain <a> would navigate the CanvasTTY window itself.
+const MARKDOWN_COMPONENTS: Components = {
+  a: ({ href, children }) => (
+    <a
+      href={href}
+      onClick={(event) => {
+        event.preventDefault();
+        if (!href) return;
+        window.canvasTTY.external.openUrl(href).catch((error: unknown) => {
+          console.warn("CanvasTTY could not open the note link.", error);
+        });
+      }}
+    >{children}</a>
+  )
+};
+
+function fileName(path: string): string {
+  return path.split(/[\\/]/).pop()?.replace(/\.md$/i, "") ?? path;
+}
+
 // Interaction behavior is adapted from @TroopJostle's StickyNoteCard in PR #23.
 export function StickyNoteCard({
   note,
@@ -62,7 +111,68 @@ export function StickyNoteCard({
   const [position, setPosition] = useState(note.position);
   const [size, setSize] = useState(note.size);
   const [text, setText] = useState(note.text);
+  const kind = note.kind ?? "text";
+  const filePath = note.filePath;
+  const [mediaUrl, setMediaUrl] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<"read" | "write" | "open" | null>(null);
+  const [editing, setEditing] = useState(false);
+  const showEditor = kind === "text" || editing;
   onTextChangeRef.current = onTextChange;
+
+  // Obsidian cards save into their Markdown file; plain notes save into settings.
+  const persist = (value: string): void => {
+    if (kind !== "obsidian" || !filePath) {
+      onTextChangeRef.current(note.id, value);
+      return;
+    }
+    window.canvasTTY.markdown.write(filePath, value).then(
+      () => setFileError(null),
+      (error: unknown) => {
+        console.error("CanvasTTY could not save the Obsidian note.", error);
+        setFileError("write");
+      }
+    );
+  };
+  const persistRef = useRef(persist);
+  persistRef.current = persist;
+
+  useEffect(() => {
+    if (kind === "text" || !filePath) return;
+    let active = true;
+    const apply = (content: string | null): void => {
+      if (!active) return;
+      if (content === null) {
+        setFileError("read");
+        return;
+      }
+      setFileError(null);
+      if (kind === "media") {
+        setMediaUrl(content);
+        return;
+      }
+      persistedText.current = content;
+      pendingText.current = content;
+      setText(content);
+    };
+    const load = (fresh: boolean): void => {
+      const picked = fresh ? undefined : pickedContent.get(filePath);
+      (picked !== undefined ? Promise.resolve(picked) : readCardFile(kind, filePath))
+        .then(apply, () => apply(null));
+    };
+    load(false);
+    if (kind !== "obsidian") return () => {
+      active = false;
+    };
+    // Pick up edits made in Obsidian when the user comes back, unless this card has unsaved typing.
+    const refresh = (): void => {
+      if (pendingText.current === persistedText.current) load(true);
+    };
+    window.addEventListener("focus", refresh);
+    return () => {
+      active = false;
+      window.removeEventListener("focus", refresh);
+    };
+  }, [kind, filePath]);
 
   useEffect(() => {
     const bounds = { position: note.position, size: note.size };
@@ -91,7 +201,7 @@ export function StickyNoteCard({
   useEffect(() => () => {
     if (textSaveTimer.current !== null) window.clearTimeout(textSaveTimer.current);
     if (pendingText.current !== persistedText.current) {
-      onTextChangeRef.current(note.id, pendingText.current);
+      persistRef.current(pendingText.current);
     }
   }, [note.id]);
 
@@ -100,7 +210,7 @@ export function StickyNoteCard({
     textSaveTimer.current = null;
     if (nextText === persistedText.current) return;
     persistedText.current = nextText;
-    onTextChangeRef.current(note.id, nextText);
+    persist(nextText);
   };
 
   const changeText = (nextText: string): void => {
@@ -215,7 +325,7 @@ export function StickyNoteCard({
 
   return (
     <article
-      className={`sticky-note-card ${groupSelected ? "sticky-note-card--selected" : ""}`}
+      className={`sticky-note-card sticky-note-card--${kind} ${groupSelected ? "sticky-note-card--selected" : ""}`}
       data-interactive="true"
       data-sticky-note-id={note.id}
       data-canvas-layer-id={`note:${note.id}`}
@@ -235,7 +345,41 @@ export function StickyNoteCard({
         onPointerCancel={endDrag}
         onLostPointerCapture={cancelDrag}
       >
-        <span><UiIcon name="sticky-note" size="1.15em" />{t(locale, "stickyNote")}</span>
+        <span title={filePath}>
+          <UiIcon name={kind === "media" ? "image-plus" : kind === "obsidian" ? "pencil" : "sticky-note"} size="1.15em" />
+          <span className="sticky-note-card__title">{filePath ? fileName(filePath) : t(locale, "stickyNote")}</span>
+        </span>
+        {kind === "obsidian" && filePath && (
+          <span className="sticky-note-card__actions">
+            <button
+              className="sticky-note-card__close"
+              type="button"
+              onClick={() => {
+                if (editing) saveText(text);
+                setEditing((current) => !current);
+              }}
+              title={t(locale, editing ? "previewNote" : "editNote")}
+              aria-label={t(locale, editing ? "previewNote" : "editNote")}
+              aria-pressed={editing}
+            >
+              <UiIcon name={editing ? "done" : "pencil"} size="1.1em" />
+            </button>
+            <button
+              className="sticky-note-card__close"
+              type="button"
+              onClick={() => {
+                window.canvasTTY.markdown.openInObsidian(filePath).catch((error: unknown) => {
+                  console.error("CanvasTTY could not open Obsidian.", error);
+                  setFileError("open");
+                });
+              }}
+              title={t(locale, "openInObsidian")}
+              aria-label={t(locale, "openInObsidian")}
+            >
+              <UiIcon name="arrow" size="1.1em" />
+            </button>
+          </span>
+        )}
         <button
           className="sticky-note-card__close"
           type="button"
@@ -249,16 +393,37 @@ export function StickyNoteCard({
           <UiIcon name="close" size="1.23em" />
         </button>
       </header>
+      {fileError && (
+        <p className="sticky-note-card__status" role="alert">
+          {t(locale, fileError === "read" ? "cardFileUnavailable" : fileError === "open" ? "obsidianOpenFailed" : "obsidianSaveFailed")}
+        </p>
+      )}
+      {kind === "media" ? (
+        mediaUrl && <img className="sticky-note-card__media" src={mediaUrl} alt={filePath ? fileName(filePath) : ""} draggable={false} />
+      ) : kind === "obsidian" && fileError !== "read" && !editing ? (
+        <div
+          className="sticky-note-card__markdown"
+          onDoubleClick={() => setEditing(true)}
+          title={t(locale, "editNote")}
+        >
+          <Markdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>{text}</Markdown>
+        </div>
+      ) : (kind === "text" || fileError !== "read") && showEditor && (
       <textarea
+        autoFocus={kind === "obsidian"}
         ref={editor}
         className="sticky-note-card__editor"
         value={text}
-        maxLength={20_000}
+        maxLength={kind === "text" ? 20_000 : undefined}
         placeholder={t(locale, "stickyNotePlaceholder")}
         aria-label={t(locale, "stickyNote")}
         onChange={(event) => changeText(event.target.value)}
-        onBlur={() => saveText(text)}
+        onBlur={() => {
+          saveText(text);
+          if (kind === "obsidian") setEditing(false);
+        }}
       />
+      )}
       {RESIZE_DIRECTIONS.map((direction) => (
         <div
           key={direction}

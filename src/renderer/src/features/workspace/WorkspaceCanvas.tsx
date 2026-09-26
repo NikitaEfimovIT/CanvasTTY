@@ -17,7 +17,8 @@ import type {
   SessionBounds,
   SessionSnapshot,
   Size,
-  StickyNote
+  StickyNote,
+  StickyNoteKind
 } from "../../../../shared/contracts";
 import { UiIcon } from "../../components/UiIcon";
 import { t } from "../../lib/i18n";
@@ -31,7 +32,7 @@ import { SessionFailureDetails, sessionFailureDetails } from "../home/SessionFai
 import { sessionStatusLabel } from "../../lib/sessionStatus";
 import { sessionStatusTone } from "../../lib/sessionStatusTone";
 import { RadialLauncher } from "../launcher/QuickRadialMenu";
-import { StickyNoteCard } from "../notes/StickyNoteCard";
+import { pickCardFile, StickyNoteCard } from "../notes/StickyNoteCard";
 import { stickyNoteAtPoint } from "../notes/stickyNoteBounds";
 import { PluginCanvasCard } from "../plugins/PluginCanvasCard";
 import { TerminalCard } from "../terminal/TerminalCard";
@@ -550,12 +551,18 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps): React.JSX.Element 
       y: Math.max(12, (bounds?.height ?? 420) / 2 - 120 * settings.uiScale)
     };
   }, [settings.uiScale]);
-  const createNote = useCallback((point: Point): void => {
+  const createNote = useCallback((point: Point, kind: StickyNoteKind = "text"): void => {
     const note = stickyNoteAtPoint(point, crypto.randomUUID());
-    onCreateStickyNote(note);
-    setNoteEditRequest((current) => ({ id: note.id, version: (current?.version ?? 0) + 1 }));
     setContextMenu(null);
     setCommandPaletteOpen(false);
+    if (kind !== "text") {
+      void pickCardFile(kind).then((filePath) => {
+        if (filePath) onCreateStickyNote({ ...note, kind, filePath });
+      });
+      return;
+    }
+    onCreateStickyNote(note);
+    setNoteEditRequest((current) => ({ id: note.id, version: (current?.version ?? 0) + 1 }));
   }, [onCreateStickyNote]);
   const launchAt = useCallback((provider: ProviderId, point?: Point): void => {
     if (provider === "terminal") onOpenTerminal(point);
@@ -1008,7 +1015,7 @@ export function WorkspaceCanvas(props: WorkspaceCanvasProps): React.JSX.Element 
             setRegionEditor({ mode: "create", focus: "title", position: contextMenu.position, worldPoint: contextMenu.worldPoint });
             setContextMenu(null);
           }}
-          onCreateNote={() => createNote(contextMenu.worldPoint)}
+          onCreateNote={(kind) => createNote(contextMenu.worldPoint, kind)}
           onLaunch={(provider) => launchAt(provider, contextMenu.worldPoint)}
           onOpenBrowser={() => {
             onOpenBrowser(contextMenu.worldPoint);

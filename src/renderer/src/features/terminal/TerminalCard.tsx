@@ -9,6 +9,7 @@ import {
   INITIAL_TERMINAL_ROWS
 } from "../../../../shared/contracts";
 import type {
+  ItermTerminalProfile,
   LocaleId,
   PaletteId,
   Point,
@@ -149,7 +150,12 @@ export function TerminalCard({
   const liveBounds = useRef<SessionBounds>({ position: session.position, size: session.size });
   const summaryMode = zoom < 0.5;
   const summaryScale = summaryMode ? Math.min(2.5, Math.max(1, 0.5 / zoom)) : 1;
-  const terminalBackground = terminalTheme(palette).background;
+  const itermProfile = useItermProfile();
+  const theme = { ...terminalTheme(palette), ...itermProfile?.theme };
+  const terminalBackground = theme.background;
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const fitRef = useRef<(() => void) | null>(null);
   const searchAddonRef = useRef<SearchAddon | null>(null);
   const webglAddonRef = useRef<WebglAddon | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -194,8 +200,8 @@ export function TerminalCard({
       rows: INITIAL_TERMINAL_ROWS,
       cursorBlink: true,
       cursorStyle: "block",
-      fontFamily: '"JetBrains Mono", "Cascadia Code", monospace',
-      fontSize: 14,
+      fontFamily: terminalFontFamily(itermProfile),
+      fontSize: itermProfile?.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE,
       lineHeight: 1.2,
       scrollback: 5_000,
       allowTransparency: true,
@@ -203,7 +209,7 @@ export function TerminalCard({
       // count) are proposed API in xterm; without this flag findNext throws and
       // the counter never leaves 0/0. The flag only unlocks that surface.
       allowProposedApi: true,
-      theme: terminalTheme(palette),
+      theme: themeRef.current,
       // OSC 8 hyperlinks are handled by xterm itself rather than WebLinksAddon.
       // Without an explicit handler, xterm shows its own confirm() prompt and
       // attempts window.open(), bypassing CanvasTTY's link destination chooser.
@@ -316,6 +322,7 @@ export function TerminalCard({
       )
       : () => undefined;
     terminalRef.current = terminal;
+    fitRef.current = fit;
     const detachScrollbarCoordinateAdapter = attachTerminalScrollbarCoordinateAdapter(terminal);
     fit();
 
@@ -355,8 +362,16 @@ export function TerminalCard({
 
   useEffect(() => {
     const terminal = terminalRef.current;
-    if (terminal) terminal.options.theme = terminalTheme(palette);
-  }, [palette]);
+    if (terminal) terminal.options.theme = themeRef.current;
+  }, [palette, itermProfile]);
+
+  useEffect(() => {
+    const terminal = terminalRef.current;
+    if (!terminal || !itermProfile) return;
+    terminal.options.fontFamily = terminalFontFamily(itermProfile);
+    terminal.options.fontSize = itermProfile.fontSize ?? DEFAULT_TERMINAL_FONT_SIZE;
+    fitRef.current?.();
+  }, [itermProfile]);
 
   const enableWebgl = (): void => {
     const terminal = terminalRef.current;
@@ -825,7 +840,32 @@ export function TerminalCard({
   );
 }
 
-function terminalTheme(palette: PaletteId): { background: string; foreground: string; cursor: string; selectionBackground: string } {
+const DEFAULT_TERMINAL_FONT_FAMILY = '"JetBrains Mono", "Cascadia Code", monospace';
+const DEFAULT_TERMINAL_FONT_SIZE = 14;
+
+let itermProfileRequest: Promise<ItermTerminalProfile | null> | null = null;
+
+/** Default iTerm2 profile (macOS only); null until loaded or when unavailable. */
+function useItermProfile(): ItermTerminalProfile | null {
+  const [profile, setProfile] = useState<ItermTerminalProfile | null>(null);
+  useEffect(() => {
+    let active = true;
+    itermProfileRequest ??= window.canvasTTY.terminal.itermProfile().catch(() => null);
+    void itermProfileRequest.then((value) => {
+      if (active) setProfile(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+  return profile;
+}
+
+function terminalFontFamily(profile: ItermTerminalProfile | null): string {
+  return profile?.fontFamily ? `${profile.fontFamily}, ${DEFAULT_TERMINAL_FONT_FAMILY}` : DEFAULT_TERMINAL_FONT_FAMILY;
+}
+
+function terminalTheme(palette: PaletteId): Record<string, string> & { background: string } {
   const background = palette === "night" ? "#171a24" : "#202430";
   return {
     background,

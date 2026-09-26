@@ -67,10 +67,16 @@ const api: CanvasTTYApi = {
   },
   dialog: {
     pickDirectory: (defaultPath?: string) => ipcRenderer.invoke(IPC.dialogPickDirectory, defaultPath),
-    pickMedia: () => ipcRenderer.invoke(IPC.dialogPickMedia)
+    pickMedia: () => ipcRenderer.invoke(IPC.dialogPickMedia),
+    pickMarkdown: () => ipcRenderer.invoke(IPC.dialogPickMarkdown)
   },
   media: {
     read: (path: string) => ipcRenderer.invoke(IPC.mediaRead, path)
+  },
+  markdown: {
+    read: (path: string) => ipcRenderer.invoke(IPC.markdownRead, path),
+    write: (path: string, text: string) => ipcRenderer.invoke(IPC.markdownWrite, path, text),
+    openInObsidian: (path: string) => ipcRenderer.invoke(IPC.markdownOpenInObsidian, path)
   },
   limits: {
     get: () => ipcRenderer.invoke(IPC.limitsGet)
@@ -186,6 +192,7 @@ const api: CanvasTTYApi = {
       process.platform
     ),
     list: () => ipcRenderer.invoke(IPC.terminalList),
+    itermProfile: () => ipcRenderer.invoke(IPC.terminalItermProfile),
     readBuffer: (id: string) => ipcRenderer.invoke(IPC.terminalReadBuffer, id),
     create: (request: CreateSessionRequest) => ipcRenderer.invoke(IPC.terminalCreate, request),
     restart: (id: string) => ipcRenderer.invoke(IPC.terminalRestart, id),
