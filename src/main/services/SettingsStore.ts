@@ -870,7 +870,7 @@ export function normalizeStickyNotes(
     const source = value as Partial<StickyNote>;
     if (!isInstanceId(source.id) || ids.has(source.id)) continue;
     if (typeof source.text !== "string" || !isFinitePoint(source.position) || !isFiniteSize(source.size)) continue;
-    const kind = source.kind === "media" || source.kind === "obsidian" ? source.kind : undefined;
+    const kind = source.kind === "media" || source.kind === "media-folder" || source.kind === "obsidian" ? source.kind : undefined;
     const filePath = kind && typeof source.filePath === "string" && isAbsolute(source.filePath)
       ? source.filePath
       : undefined;

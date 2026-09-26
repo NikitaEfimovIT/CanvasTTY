@@ -1,5 +1,5 @@
-import { extname } from "node:path";
-import { readFile, stat, writeFile } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from "electron";
 import type { IpcMainEvent, IpcMainInvokeEvent, OpenDialogOptions } from "electron";
 import type {
@@ -182,8 +182,29 @@ export function registerIpc({
   });
 
   // Renderer may only touch files the user picked for a saved card (or Home media).
-  const cardFile = (path: unknown, kind: "media" | "obsidian"): path is string => typeof path === "string"
+  const cardFile = (path: unknown, kind: "media" | "media-folder" | "obsidian"): path is string => typeof path === "string"
     && settings.get().stickyNotes.some((note) => note.kind === kind && note.filePath === path);
+
+  ipcMain.handle(IPC.dialogPickMediaFolder, async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender);
+    const options: OpenDialogOptions = { title: "Choose image folder", properties: ["openDirectory"] };
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options);
+    const path = result.filePaths[0];
+    if (result.canceled || !path) return null;
+    return { path, dataUrl: await randomMediaFromFolder(path) };
+  });
+
+  ipcMain.handle(IPC.mediaRandomFromFolder, async (_event, folder: unknown) => {
+    if (!cardFile(folder, "media-folder")) return null;
+    try {
+      return await randomMediaFromFolder(folder);
+    } catch (error) {
+      console.warn("CanvasTTY could not read the image folder.", error);
+      return null;
+    }
+  });
 
   ipcMain.handle(IPC.dialogPickMarkdown, async (event) => {
     const owner = BrowserWindow.fromWebContents(event.sender);
@@ -832,6 +853,22 @@ async function readMedia(path: string): Promise<string> {
 
   const content = await readFile(path);
   return `data:${mime};base64,${content.toString("base64")}`;
+}
+
+// Last image shown per folder, so a click always changes the picture when the folder has more than one.
+const lastRandomMedia = new Map<string, string>();
+
+// ponytail: top-level files only; walk subfolders if nested photo libraries matter.
+async function randomMediaFromFolder(folder: string): Promise<string | null> {
+  const entries = await readdir(folder, { withFileTypes: true });
+  const images = entries
+    .filter((entry) => entry.isFile() && MEDIA_MIME[extname(entry.name).toLowerCase()])
+    .map((entry) => join(folder, entry.name));
+  const candidates = images.length > 1 ? images.filter((path) => path !== lastRandomMedia.get(folder)) : images;
+  const path = candidates[Math.floor(Math.random() * candidates.length)];
+  if (!path) return null;
+  lastRandomMedia.set(folder, path);
+  return readMedia(path);
 }
 
 async function readMarkdown(path: string): Promise<string> {

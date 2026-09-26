@@ -128,6 +128,9 @@ export function CanvasContextMenu({
           <CanvasMenuRow icon="image-plus" role="menuitem" onClick={() => onCreateNote("media")}>
             {t(locale, "newMediaCard")}
           </CanvasMenuRow>
+          <CanvasMenuRow icon="folder" role="menuitem" onClick={() => onCreateNote("media-folder")}>
+            {t(locale, "newMediaFolderCard")}
+          </CanvasMenuRow>
           <CanvasMenuRow icon="pencil" role="menuitem" onClick={() => onCreateNote("obsidian")}>
             {t(locale, "newObsidianCard")}
           </CanvasMenuRow>

@@ -39,6 +39,8 @@ interface ResizeState extends DragState {
 }
 
 const DRAG_THRESHOLD_PX = 4;
+// ponytail: one fixed interval for every folder card; make it per-card when someone needs different speeds.
+const MEDIA_FOLDER_ROTATE_MS = 60_000;
 const RESIZE_DIRECTIONS: ResizeDirection[] = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
 
 type FileCardKind = Exclude<StickyNoteKind, "text">;
@@ -50,6 +52,11 @@ const pickedContent = new Map<string, string>();
 /** Opens the file picker for a media/Obsidian card; resolves to the chosen path or null. */
 export async function pickCardFile(kind: FileCardKind): Promise<string | null> {
   try {
+    if (kind === "media-folder") {
+      const picked = await window.canvasTTY.dialog.pickMediaFolder();
+      if (picked?.dataUrl) pickedContent.set(picked.path, picked.dataUrl);
+      return picked?.path ?? null;
+    }
     if (kind === "media") {
       const picked = await window.canvasTTY.dialog.pickMedia();
       if (picked) pickedContent.set(picked.path, picked.dataUrl);
@@ -65,6 +72,7 @@ export async function pickCardFile(kind: FileCardKind): Promise<string | null> {
 }
 
 function readCardFile(kind: FileCardKind, path: string): Promise<string | null> {
+  if (kind === "media-folder") return window.canvasTTY.media.randomFromFolder(path);
   return kind === "media" ? window.canvasTTY.media.read(path) : window.canvasTTY.markdown.read(path);
 }
 
@@ -151,7 +159,7 @@ export function StickyNoteCard({
         return;
       }
       setFileError(null);
-      if (kind === "media") {
+      if (kind !== "obsidian") {
         setMediaUrl(content);
         return;
       }
@@ -165,6 +173,16 @@ export function StickyNoteCard({
         .then(apply, () => apply(null));
     };
     load(false);
+    if (kind === "media-folder") {
+      // Skip ticks while the window is hidden so a minimized app does not keep reading images.
+      const timer = window.setInterval(() => {
+        if (!document.hidden) load(true);
+      }, MEDIA_FOLDER_ROTATE_MS);
+      return () => {
+        active = false;
+        window.clearInterval(timer);
+      };
+    }
     if (kind !== "obsidian") return () => {
       active = false;
     };
@@ -347,7 +365,7 @@ export function StickyNoteCard({
     transform: `translate(${position.x}px, ${position.y}px)`
   };
 
-  if (kind === "media") {
+  if (kind === "media" || kind === "media-folder") {
     // Reuses the HOME "Your corner" tile as-is; this wrapper only adds canvas drag and resize.
     // A drag starts after a few pixels so a plain click still reaches the tile's picker.
     const mediaPointerDown = (event: React.PointerEvent<HTMLDivElement>): void => {
@@ -398,6 +416,12 @@ export function StickyNoteCard({
             dataUrl={mediaUrl}
             fit="cover"
             onRequestMedia={async () => {
+              if (kind === "media-folder") {
+                // A click on a folder card shows another random image from the same folder.
+                const next = filePath ? await window.canvasTTY.media.randomFromFolder(filePath) : null;
+                if (next) setMediaUrl(next);
+                return;
+              }
               const path = await pickCardFile("media");
               if (!path) return;
               setMediaUrl(pickedContent.get(path) ?? null);

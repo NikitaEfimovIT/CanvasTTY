@@ -68,10 +68,12 @@ const api: CanvasTTYApi = {
   dialog: {
     pickDirectory: (defaultPath?: string) => ipcRenderer.invoke(IPC.dialogPickDirectory, defaultPath),
     pickMedia: () => ipcRenderer.invoke(IPC.dialogPickMedia),
-    pickMarkdown: () => ipcRenderer.invoke(IPC.dialogPickMarkdown)
+    pickMarkdown: () => ipcRenderer.invoke(IPC.dialogPickMarkdown),
+    pickMediaFolder: () => ipcRenderer.invoke(IPC.dialogPickMediaFolder)
   },
   media: {
-    read: (path: string) => ipcRenderer.invoke(IPC.mediaRead, path)
+    read: (path: string) => ipcRenderer.invoke(IPC.mediaRead, path),
+    randomFromFolder: (folder: string) => ipcRenderer.invoke(IPC.mediaRandomFromFolder, folder)
   },
   markdown: {
     read: (path: string) => ipcRenderer.invoke(IPC.markdownRead, path),

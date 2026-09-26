@@ -417,14 +417,15 @@ async function initializeServices(): Promise<void> {
       const previousStatus = notifiedAttentionStatus.get(id);
       notifiedAttentionStatus.set(id, status);
       const failureOrigin = status === "failed" ? terminalManager?.consumeFailureOrigin() ?? null : null;
-      if ((status === "needs_approval" || status === "failed")
+      const needsAttention = (status === "needs_approval" || status === "failed")
         && failureOrigin !== "restore"
-        && (failureOrigin === "user" || previousStatus !== status)
-        && settings.get().attentionNotifications
-        && Notification.isSupported()) {
+        && (failureOrigin === "user" || previousStatus !== status);
+      // An agent finishing its turn: working → idle (lifecycle hook) or a clean exit.
+      const finished = provider !== "terminal" && previousStatus === "working" && (status === "idle" || status === "done");
+      if ((needsAttention || finished) && settings.get().attentionNotifications && Notification.isSupported()) {
         new Notification({
           title: title || provider,
-          body: attentionStatusLabel(status, settings.get().locale)
+          body: attentionStatusLabel(finished ? "finished" : status as "needs_approval" | "failed", settings.get().locale)
         }).show();
       }
     } else if (channel === IPC.terminalRemoved && "id" in payload) {
@@ -760,8 +761,9 @@ async function showStartupFailure(window: BrowserWindow, error: unknown): Promis
   }
 }
 
-/** Notification body for the two statuses that deserve the user's attention. */
-function attentionStatusLabel(status: "needs_approval" | "failed", locale: LocaleId): string {
+/** Notification body for the session events that deserve the user's attention. */
+function attentionStatusLabel(status: "needs_approval" | "failed" | "finished", locale: LocaleId): string {
+  if (status === "finished") return locale === "ru" ? "Агент закончил работу" : "Agent finished";
   if (status === "needs_approval") return locale === "ru" ? "Требуется подтверждение" : "Needs approval";
   return locale === "ru" ? "Сессия завершилась с ошибкой" : "Session failed";
 }

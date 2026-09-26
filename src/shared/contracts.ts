@@ -168,14 +168,14 @@ export interface SessionBounds {
   size: Size;
 }
 
-export type StickyNoteKind = "text" | "media" | "obsidian";
+export type StickyNoteKind = "text" | "media" | "media-folder" | "obsidian";
 
 export interface StickyNote extends SessionBounds {
   id: string;
   text: string;
   /** Absent means "text" (notes saved before canvas media/Obsidian cards). */
   kind?: StickyNoteKind;
-  /** Image path for "media", Markdown file path for "obsidian". */
+  /** Image path for "media", image folder for "media-folder", Markdown file path for "obsidian". */
   filePath?: string;
 }
 
@@ -337,6 +337,12 @@ export interface SessionRemovedEvent {
 export interface MediaSelection {
   path: string;
   dataUrl: string;
+}
+
+/** A picked image folder plus one random image from it (null when it has none). */
+export interface MediaFolderSelection {
+  path: string;
+  dataUrl: string | null;
 }
 
 export interface WindowState {
@@ -1100,9 +1106,11 @@ export interface CanvasTTYApi {
     pickDirectory(defaultPath?: string): Promise<string | null>;
     pickMedia(): Promise<MediaSelection | null>;
     pickMarkdown(): Promise<MarkdownSelection | null>;
+    pickMediaFolder(): Promise<MediaFolderSelection | null>;
   };
   media: {
     read(path: string): Promise<string | null>;
+    randomFromFolder(folder: string): Promise<string | null>;
   };
   markdown: {
     read(path: string): Promise<string | null>;
@@ -1243,6 +1251,8 @@ export const IPC = {
   dialogPickMedia: "dialog:pick-media",
   mediaRead: "media:read",
   dialogPickMarkdown: "dialog:pick-markdown",
+  dialogPickMediaFolder: "dialog:pick-media-folder",
+  mediaRandomFromFolder: "media:random-from-folder",
   markdownRead: "markdown:read",
   markdownWrite: "markdown:write",
   markdownOpenInObsidian: "markdown:open-in-obsidian",
