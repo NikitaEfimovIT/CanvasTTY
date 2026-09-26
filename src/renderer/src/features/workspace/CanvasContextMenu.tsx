@@ -3,7 +3,8 @@ import type {
   CanvasLauncherItemId,
   LocaleId,
   Point,
-  ProviderId
+  ProviderId,
+  StickyNoteKind
 } from "../../../../shared/contracts";
 import { ProviderIcon } from "../../components/ProviderIcon";
 import { t } from "../../lib/i18n";
@@ -31,7 +32,7 @@ interface CanvasContextMenuProps {
   launcherItems: readonly CanvasLauncherItemId[];
   currentRegionColor: string | null;
   onCreateRegion(): void;
-  onCreateNote(): void;
+  onCreateNote(kind?: StickyNoteKind): void;
   onLaunch(provider: ProviderId): void;
   onOpenBrowser(): void;
   onOpenSettings(): void;
@@ -122,8 +123,14 @@ export function CanvasContextMenu({
             icon="sticky-note"
             right={<CanvasMenuSub>{t(locale, "canvasMenuHere")}</CanvasMenuSub>}
             role="menuitem"
-            onClick={onCreateNote}
+            onClick={() => onCreateNote()}
           >{t(locale, "newStickyNote")}</CanvasMenuRow>
+          <CanvasMenuRow icon="image-plus" role="menuitem" onClick={() => onCreateNote("media")}>
+            {t(locale, "newMediaCard")}
+          </CanvasMenuRow>
+          <CanvasMenuRow icon="pencil" role="menuitem" onClick={() => onCreateNote("obsidian")}>
+            {t(locale, "newObsidianCard")}
+          </CanvasMenuRow>
           <CanvasMenuDivider />
           <div className="canvas-menu__submenu-anchor">
             <CanvasMenuRow
@@ -203,7 +210,7 @@ export function CanvasContextMenu({
               ))}
             </div>
           </div>
-          <CanvasMenuRow icon="sticky-note" role="menuitem" onClick={onCreateNote}>
+          <CanvasMenuRow icon="sticky-note" role="menuitem" onClick={() => onCreateNote()}>
             {t(locale, "canvasMenuNoteInRegion")}
           </CanvasMenuRow>
           <CanvasMenuDivider />

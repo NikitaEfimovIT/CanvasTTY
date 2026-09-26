@@ -509,6 +509,13 @@ export function App(): React.JSX.Element {
     void saveSettings({ stickyNotes });
   }, [saveSettings]);
 
+  const changeStickyNoteFile = useCallback((id: string, filePath: string): void => {
+    const stickyNotes = settingsRef.current.stickyNotes.map((note) => note.id === id ? { ...note, filePath } : note);
+    settingsRef.current = { ...settingsRef.current, stickyNotes };
+    setSettings((current) => ({ ...current, stickyNotes }));
+    void saveSettings({ stickyNotes });
+  }, [saveSettings]);
+
   const deleteStickyNote = useCallback((id: string): void => {
     const stickyNotes = settingsRef.current.stickyNotes.filter((note) => note.id !== id);
     settingsRef.current = { ...settingsRef.current, stickyNotes };
@@ -1101,6 +1108,7 @@ export function App(): React.JSX.Element {
           onCreateStickyNote={createStickyNote}
           onStickyNoteBoundsChange={changeStickyNoteBounds}
           onStickyNoteTextChange={changeStickyNoteText}
+          onStickyNoteFileChange={changeStickyNoteFile}
           onDeleteStickyNote={deleteStickyNote}
         />
       </main>

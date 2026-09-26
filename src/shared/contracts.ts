@@ -168,9 +168,27 @@ export interface SessionBounds {
   size: Size;
 }
 
+export type StickyNoteKind = "text" | "media" | "obsidian";
+
 export interface StickyNote extends SessionBounds {
   id: string;
   text: string;
+  /** Absent means "text" (notes saved before canvas media/Obsidian cards). */
+  kind?: StickyNoteKind;
+  /** Image path for "media", Markdown file path for "obsidian". */
+  filePath?: string;
+}
+
+export interface MarkdownSelection {
+  path: string;
+  text: string;
+}
+
+/** Subset of xterm's ITheme plus font, read from the default iTerm2 profile. */
+export interface ItermTerminalProfile {
+  theme: Record<string, string>;
+  fontFamily: string | null;
+  fontSize: number | null;
 }
 
 export const STICKY_NOTE_MIN_SIZE: Size = { width: 180, height: 140 };
@@ -1081,9 +1099,15 @@ export interface CanvasTTYApi {
   dialog: {
     pickDirectory(defaultPath?: string): Promise<string | null>;
     pickMedia(): Promise<MediaSelection | null>;
+    pickMarkdown(): Promise<MarkdownSelection | null>;
   };
   media: {
     read(path: string): Promise<string | null>;
+  };
+  markdown: {
+    read(path: string): Promise<string | null>;
+    write(path: string, text: string): Promise<void>;
+    openInObsidian(path: string): Promise<void>;
   };
   limits: {
     get(): Promise<LimitsSnapshot>;
@@ -1174,6 +1198,7 @@ export interface CanvasTTYApi {
   terminal: {
     fileDropText(files: File[]): string;
     list(): Promise<SessionSnapshot[]>;
+    itermProfile(): Promise<ItermTerminalProfile | null>;
     readBuffer(id: string): Promise<TerminalBufferSnapshot>;
     create(request: CreateSessionRequest): Promise<SessionSnapshot>;
     restart(id: string): Promise<SessionSnapshot>;
@@ -1217,6 +1242,11 @@ export const IPC = {
   dialogPickDirectory: "dialog:pick-directory",
   dialogPickMedia: "dialog:pick-media",
   mediaRead: "media:read",
+  dialogPickMarkdown: "dialog:pick-markdown",
+  markdownRead: "markdown:read",
+  markdownWrite: "markdown:write",
+  markdownOpenInObsidian: "markdown:open-in-obsidian",
+  terminalItermProfile: "terminal:iterm-profile",
   limitsGet: "limits:get",
   pluginsList: "plugins:list",
   pluginsSearch: "plugins:search",
